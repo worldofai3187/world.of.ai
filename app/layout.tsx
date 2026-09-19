@@ -5,6 +5,9 @@ import { AuthProvider } from '@/lib/auth-context';
 
 const inter = Inter({ subsets: ['latin'] });
 
+// Dashboard is auth-driven; never prerender it at build time.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'World of AI',
   description: 'Command your AI agents. Wali, MotherBot, and Agents in one secure dashboard.',

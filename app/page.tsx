@@ -2,7 +2,6 @@
 
 import { useAuth } from '@/lib/auth-context';
 
-export const dynamic = 'force-dynamic';
 import { AuthScreen } from '@/components/auth/auth-screen';
 import { OnboardingFlow } from '@/components/onboarding/onboarding-flow';
 import { Dashboard } from '@/components/dashboard/dashboard';
