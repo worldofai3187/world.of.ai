@@ -14,15 +14,23 @@ export function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     setLoading(true);
-    const fn = mode === 'signup' ? signUp : signIn;
-    const { error } = await fn(email, password);
-    if (error) setError(error);
+    if (mode === 'signup') {
+      const { error, needsConfirmation } = await signUp(email, password);
+      if (error) setError(error);
+      else if (needsConfirmation)
+        setNotice(`Account created. Supabase sent a confirmation link to ${email}. Open it, then sign in.`);
+    } else {
+      const { error } = await signIn(email, password);
+      if (error) setError(error);
+    }
     setLoading(false);
   };
 
@@ -74,6 +82,9 @@ export function AuthScreen() {
             {error && (
               <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">{error}</p>
             )}
+            {notice && (
+              <p className="text-sm text-foreground bg-primary/10 rounded-md px-3 py-2">{notice}</p>
+            )}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Please wait…</>
@@ -93,7 +104,7 @@ export function AuthScreen() {
           <p className="mt-4 text-center text-sm text-muted-foreground">
             {mode === 'signup' ? 'Already have an account?' : "Don't have an account?"}{' '}
             <button
-              onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setError(null); }}
+              onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setError(null); setNotice(null); }}
               className="font-medium text-primary hover:underline"
               type="button"
             >
