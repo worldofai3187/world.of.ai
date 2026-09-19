@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { supabase, type Agent, type Profile } from '@/lib/supabase';
+import { supabase, AGENT_PUBLIC_COLUMNS, type Agent, type Profile } from '@/lib/supabase';
 import { OnboardingFlow } from '@/components/onboarding/onboarding-flow';
 import { AgentSwitcher } from '@/components/dashboard/agent-switcher';
 import { PhoneDashboard } from '@/components/dashboard/phone-dashboard';
@@ -24,7 +24,7 @@ export function Dashboard() {
     if (!user) return;
     const [{ data: prof }, { data: ags }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
-      supabase.from('agents').select('*').order('created_at', { ascending: true }),
+      supabase.from('agents').select(AGENT_PUBLIC_COLUMNS).order('created_at', { ascending: true }),
     ]);
     const profData = prof as Profile | null;
     setProfile(profData);

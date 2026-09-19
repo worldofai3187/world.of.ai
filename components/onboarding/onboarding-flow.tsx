@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { supabase, type Agent, type Profile } from '@/lib/supabase';
+import { supabase, AGENT_PUBLIC_COLUMNS, type Agent, type Profile } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -90,7 +90,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
             gemini_api_key: geminiKey,
             onboarding_complete: true,
           })
-          .select()
+          .select(AGENT_PUBLIC_COLUMNS)
           .single();
         if (agentErr) throw agentErr;
         // Seed a welcome wallet transaction

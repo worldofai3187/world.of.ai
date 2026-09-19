@@ -7,9 +7,9 @@ import { Cpu, Key, Mail, Brain, Zap, Shield } from 'lucide-react';
 
 export function AiResourcesApp({ agent }: { agent: Agent }) {
   const resources = [
-    { icon: Brain, label: 'Gemini Brain', value: agent.gemini_api_key ? 'Connected' : 'Not set', status: !!agent.gemini_api_key },
+    { icon: Brain, label: 'Gemini Brain', value: agent.gemini_key_set ? 'Connected' : 'Not set', status: agent.gemini_key_set },
     { icon: Mail, label: 'Gmail', value: agent.gmail || 'Not set', status: !!agent.gmail },
-    { icon: Key, label: 'API Key', value: agent.gemini_api_key ? `••••${agent.gemini_api_key.slice(-4)}` : 'Missing', status: !!agent.gemini_api_key },
+    { icon: Key, label: 'API Key', value: agent.gemini_key_set ? 'Stored server-side' : 'Missing', status: agent.gemini_key_set },
     { icon: Zap, label: 'Quota', value: 'Dedicated', status: true },
     { icon: Shield, label: 'Ethics', value: agent.ethics_agreed ? 'Agreed' : 'Pending', status: agent.ethics_agreed },
   ];

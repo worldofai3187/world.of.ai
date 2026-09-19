@@ -10,6 +10,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+/**
+ * Columns safe to send to the browser. Note: `gemini_api_key` is deliberately absent.
+ * The raw key is only ever read server-side (see app/api/chat/route.ts); the client
+ * only learns whether one exists, via the generated `gemini_key_set` column.
+ */
+export const AGENT_PUBLIC_COLUMNS =
+  'id, user_id, name, personality, likes, dislikes, skills, boundaries, ethics_agreed, gmail, wallet_balance, onboarding_complete, gemini_key_set, created_at';
+
 export type Agent = {
   id: string;
   user_id: string;
@@ -21,7 +29,7 @@ export type Agent = {
   boundaries: string | null;
   ethics_agreed: boolean;
   gmail: string | null;
-  gemini_api_key: string | null;
+  gemini_key_set: boolean;
   wallet_balance: number;
   onboarding_complete: boolean;
   created_at: string;

@@ -11,6 +11,7 @@ export function ChatApp({ agent }: { agent: Agent }) {
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const load = async () => {
@@ -27,28 +28,48 @@ export function ChatApp({ agent }: { agent: Agent }) {
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    const userMsg = input.trim();
+    if (!userMsg || sending) return;
     setSending(true);
-    const userMsg = input;
+    setError(null);
     setInput('');
 
-    await supabase.from('chat_messages').insert({
-      agent_id: agent.id,
-      role: 'user',
-      content: userMsg,
-    });
+    // Show the user's line immediately; the server saves the real row.
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `local-${Date.now()}`,
+        agent_id: agent.id,
+        role: 'user',
+        content: userMsg,
+        created_at: new Date().toISOString(),
+      } as ChatMessage,
+    ]);
 
-    // Simulated agent response (would call Gemini in production)
-    const response = `Hello! I'm ${agent.name}. ${agent.personality ? `I'm ${agent.personality}.` : ''} How can I help you with that?`;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Your session expired. Log in again.');
 
-    await supabase.from('chat_messages').insert({
-      agent_id: agent.id,
-      role: 'assistant',
-      content: response,
-    });
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ agent_id: agent.id, message: userMsg }),
+      });
 
-    setSending(false);
-    load();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.detail || data?.error || 'The agent could not reply.');
+      }
+      await load();
+    } catch (err: any) {
+      setError(err?.message || 'Something went wrong.');
+      await load();
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -97,6 +118,10 @@ export function ChatApp({ agent }: { agent: Agent }) {
           </div>
         )}
       </div>
+
+      {error && (
+        <p className="text-xs text-destructive">{error}</p>
+      )}
 
       <form onSubmit={handleSend} className="flex gap-2">
         <Input

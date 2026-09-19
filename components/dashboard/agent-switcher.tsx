@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { supabase, type Agent } from '@/lib/supabase';
+import { supabase, AGENT_PUBLIC_COLUMNS, type Agent } from '@/lib/supabase';
 import { OnboardingFlow } from '@/components/onboarding/onboarding-flow';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -76,7 +76,7 @@ export function AgentSwitcher({
             setAdding(false);
             // Reload agents
             (async () => {
-              const { data } = await supabase.from('agents').select('*').order('created_at', { ascending: true });
+              const { data } = await supabase.from('agents').select(AGENT_PUBLIC_COLUMNS).order('created_at', { ascending: true });
               const list = (data || []) as Agent[];
               if (list.length > 0) {
                 const newest = list[list.length - 1];
