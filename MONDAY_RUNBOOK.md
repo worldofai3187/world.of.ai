@@ -26,11 +26,14 @@ disimpan di kolom `agents.gemini_api_key`, dan cuma dibaca di server. Tiap agent
 kuota sendiri.
 
 **3. Migrasi database** (kalau belum pernah jalan)
-Buka Supabase → SQL Editor → jalankan dua file ini, urut:
+Buka Supabase → SQL Editor → jalankan tiga file ini, urut:
 ```
 supabase/migrations/20260829134129_create_world_of_ai_schema.sql
 supabase/migrations/20260919000000_phase1_api_usage.sql
+supabase/migrations/20260920000000_phase1_state_field.sql
 ```
+File ketiga cuma nambah satu kolom nullable (`chat_messages.emotional_state`). Aman
+dijalanin kapan aja, nggak nambah langkah tes, dan nggak aku pakai dulu di phase 1.
 
 **4. Isi key Gemini agent**
 Lewat onboarding step "Gemini" (kolom `GEMINI_API_KEY`, input password).
@@ -64,6 +67,8 @@ Dari dua itu aku bisa bilang masalahnya key, model, RLS, atau env. Aku nggak neb
 ## Yang sengaja BELUM kita sentuh
 - 3D avatar (.glb VRoid) → phase 5. Phase 1 cukup avatar satu gambar (URL).
 - relationship_state / activity_log / delta JSON → sesudah satu panggilan ini jalan.
+- `emotional_state` sudah ada kolomnya (schema siap), tapi sengaja belum ditulis. Kontrak
+  state → ekspresinya di `AVATAR_SPEC.md` §7, buat kamu baca pas sempat.
 - Condition (RPM/TPM/RPD) → otomatis punya angka begitu `api_usage` terisi.
 
 Satu hal dulu. Satu.
