@@ -23,8 +23,22 @@ export type GeminiResult =
   | { ok: false; model: string; status: number; error: string };
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+
+/**
+ * Model IDs get retired by Google on their own schedule. If the first one 404s,
+ * the whole session should not die with it. When GEMINI_MODEL is set explicitly
+ * we honor it and try nothing else; otherwise we walk this list in order.
+ */
+const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
 const DEFAULT_TIMEOUT_MS = 30_000;
+
+/** A retired/unknown model ID is worth retrying on a different model; a bad key or quota is not. */
+function isModelNotFound(status: number, error: string): boolean {
+  if (status === 404) return true;
+  return /not found|not supported|does not exist|unsupported model|unknown model|is not available/i.test(
+    error
+  );
+}
 
 /** Gemini rejects two turns with the same role in a row. Collapse them. */
 function normalizeTurns(turns: GeminiTurn[]): GeminiTurn[] {
@@ -50,7 +64,32 @@ export async function callGemini(params: {
   temperature?: number;
   maxOutputTokens?: number;
 }): Promise<GeminiResult> {
-  const model = params.model || DEFAULT_MODEL;
+  const explicit = params.model || process.env.GEMINI_MODEL || '';
+  const models = explicit ? [explicit] : FALLBACK_MODELS;
+
+  let last: GeminiResult | null = null;
+  for (const model of models) {
+    const result = await callModel(params, model);
+    if (result.ok) return result;
+    last = result;
+    // Only a missing model justifies trying the next one. Everything else
+    // (bad key, quota, timeout) is a real answer and must reach the caller.
+    if (!isModelNotFound(result.status, result.error)) return result;
+  }
+  return last as GeminiResult;
+}
+
+async function callModel(
+  params: {
+    apiKey: string;
+    system: string;
+    history?: GeminiTurn[];
+    message: string;
+    temperature?: number;
+    maxOutputTokens?: number;
+  },
+  model: string
+): Promise<GeminiResult> {
   const url = `${ENDPOINT}/${encodeURIComponent(model)}:generateContent`;
 
   const contents = normalizeTurns([
