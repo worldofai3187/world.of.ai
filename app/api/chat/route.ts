@@ -21,6 +21,21 @@ const HISTORY_LIMIT = 20;
 const MAX_MESSAGE_CHARS = 4000;
 
 export async function POST(req: NextRequest) {
+  // Any crash below must reach the browser as readable JSON, never as an HTML
+  // 500 page. The client shows a generic line when the body is not JSON, which
+  // hides the real cause. This wrapper keeps the cause visible.
+  try {
+    return await handle(req);
+  } catch (e: any) {
+    console.error('[api/chat] unhandled error:', e);
+    return NextResponse.json(
+      { error: 'unhandled', detail: String(e?.message || e) },
+      { status: 500 }
+    );
+  }
+}
+
+async function handle(req: NextRequest) {
   const auth = req.headers.get('authorization') || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!token) {

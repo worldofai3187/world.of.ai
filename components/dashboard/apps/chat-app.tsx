@@ -59,9 +59,20 @@ export function ChatApp({ agent }: { agent: Agent }) {
         body: JSON.stringify({ agent_id: agent.id, message: userMsg }),
       });
 
-      const data = await res.json().catch(() => ({}));
+      const raw = await res.text();
+      let data: any = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        data = {};
+      }
       if (!res.ok) {
-        throw new Error(data?.detail || data?.error || 'The agent could not reply.');
+        // Surface the real cause instead of a generic line: JSON error/detail
+        // if the server sent one, otherwise the HTTP status plus a body snippet.
+        const fallback = raw
+          ? `HTTP ${res.status}: ${raw.slice(0, 300)}`
+          : `HTTP ${res.status}`;
+        throw new Error(data?.detail || data?.error || fallback);
       }
       await load();
     } catch (err: any) {
