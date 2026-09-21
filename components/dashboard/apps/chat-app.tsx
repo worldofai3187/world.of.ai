@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase, type Agent, type ChatMessage } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ConditionChip } from '@/components/dashboard/condition-chip';
 import { MessageSquare, Send, Loader2, Bot, User } from 'lucide-react';
 
 export function ChatApp({ agent }: { agent: Agent }) {
@@ -85,7 +86,10 @@ export function ChatApp({ agent }: { agent: Agent }) {
 
   return (
     <div className="space-y-3 flex flex-col h-full">
-      <h3 className="font-semibold flex items-center gap-2"><MessageSquare className="h-4 w-4" /> Chat with {agent.name}</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="font-semibold flex items-center gap-2"><MessageSquare className="h-4 w-4" /> Chat with {agent.name}</h3>
+        <ConditionChip agent={agent} />
+      </div>
 
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto scrollbar-hide min-h-[300px] max-h-[400px]">
         {loading ? (

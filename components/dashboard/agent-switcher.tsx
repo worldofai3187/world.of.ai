@@ -57,13 +57,19 @@ export function AgentSwitcher({
         ))}
       </div>
 
-      <Button
-        variant="outline"
-        className="w-full border-dashed"
-        onClick={() => setAdding(true)}
-      >
-        <Plus className="h-4 w-4" /> Add Agent
-      </Button>
+      {agents.length === 0 ? (
+        <Button
+          variant="outline"
+          className="w-full border-dashed"
+          onClick={() => setAdding(true)}
+        >
+          <Plus className="h-4 w-4" /> Add Agent
+        </Button>
+      ) : (
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          1 wali = 1 agent. Satu karakter, satu ingatan, nggak tercampur.
+        </p>
+      )}
 
       <Dialog open={adding} onOpenChange={setAdding}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">

@@ -8,11 +8,13 @@ import { TreasureApp } from '@/components/dashboard/apps/treasure-app';
 import { EmailApp } from '@/components/dashboard/apps/email-app';
 import { ChatApp } from '@/components/dashboard/apps/chat-app';
 import { FilesApp } from '@/components/dashboard/apps/files-app';
+import { ConditionApp } from '@/components/dashboard/apps/condition-app';
+import { ConditionChip } from '@/components/dashboard/condition-chip';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Briefcase, Cpu, Wallet, Mail, MessageSquare, FolderOpen, ChevronLeft } from 'lucide-react';
+import { Briefcase, Cpu, Wallet, Mail, MessageSquare, FolderOpen, ChevronLeft, Activity } from 'lucide-react';
 
-type AppKey = 'job' | 'ai' | 'treasure' | 'email' | 'chat' | 'files';
+type AppKey = 'job' | 'ai' | 'treasure' | 'email' | 'chat' | 'files' | 'condition';
 
 const APPS: { key: AppKey; label: string; icon: typeof Briefcase; color: string }[] = [
   { key: 'job', label: 'Job', icon: Briefcase, color: 'text-primary' },
@@ -21,6 +23,7 @@ const APPS: { key: AppKey; label: string; icon: typeof Briefcase; color: string 
   { key: 'email', label: 'Email', icon: Mail, color: 'text-success' },
   { key: 'chat', label: 'Chat', icon: MessageSquare, color: 'text-primary' },
   { key: 'files', label: 'Files', icon: FolderOpen, color: 'text-muted-foreground' },
+  { key: 'condition', label: 'Condition', icon: Activity, color: 'text-destructive' },
 ];
 
 export function PhoneDashboard({
@@ -39,7 +42,7 @@ export function PhoneDashboard({
         <div className="rounded-[2rem] overflow-hidden bg-background/60">
           {/* Status bar */}
           <div className="flex items-center justify-between px-6 py-2 text-xs text-muted-foreground">
-            <span>{agent.name}</span>
+            <ConditionChip agent={agent} />
             <span className="flex items-center gap-1">
               <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
               Online
@@ -64,6 +67,7 @@ export function PhoneDashboard({
                 {activeApp === 'email' && <EmailApp agent={agent} />}
                 {activeApp === 'chat' && <ChatApp agent={agent} />}
                 {activeApp === 'files' && <FilesApp agent={agent} />}
+                {activeApp === 'condition' && <ConditionApp agent={agent} />}
               </div>
             </div>
           ) : (
