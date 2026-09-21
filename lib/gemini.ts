@@ -29,13 +29,21 @@ const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
  * the whole session should not die with it. When GEMINI_MODEL is set explicitly
  * we honor it and try nothing else; otherwise we walk this list in order.
  */
-const FALLBACK_MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash'];
+const FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-/** A retired/unknown model ID is worth retrying on a different model; a bad key or quota is not. */
+/**
+ * A retired/unknown model ID is worth retrying on a different model; a bad key or quota is not.
+ *
+ * Google does NOT always answer a retired model with 404. Observed in production:
+ *   "This model models/gemini-2.0-flash is no longer available. Please update your code to use
+ *    models/gemini-3.6-flash ..."
+ * That phrasing slipped past an older regex, so the first model aborted the whole chain and the
+ * user saw the stale-model error instead of a reply. Match the wording Google actually uses.
+ */
 function isModelNotFound(status: number, error: string): boolean {
   if (status === 404) return true;
-  return /not found|not supported|does not exist|unsupported model|unknown model|is not available/i.test(
+  return /not found|not supported|does not exist|unsupported model|unknown model|no longer available|is not available|retired|deprecated|no longer supported/i.test(
     error
   );
 }
