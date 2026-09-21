@@ -16,6 +16,16 @@ import { Database, Mail, Key, Sparkles, User, Heart, ThumbsDown, Wrench, ShieldA
 type Step = 'supabase' | 'gmail' | 'gemini' | 'ritual' | 'done';
 const STEP_ORDER: Step[] = ['supabase', 'gmail', 'gemini', 'ritual'];
 
+// A free-text field should never fail because of a stray comma. Split on commas
+// or newlines, trim, drop empties, rejoin — so "web search, coding, " is valid.
+function cleanList(value: string): string {
+  return value
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(', ');
+}
+
 export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
   const { user } = useAuth();
   const [stepIdx, setStepIdx] = useState(0);
@@ -81,10 +91,10 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
             user_id: user!.id,
             name: agentName,
             personality,
-            likes,
-            dislikes,
-            skills,
-            boundaries,
+            likes: cleanList(likes),
+            dislikes: cleanList(dislikes),
+            skills: cleanList(skills),
+            boundaries: cleanList(boundaries),
             ethics_agreed: ethicsAgreed,
             gmail,
             gemini_api_key: geminiKey,
