@@ -29,7 +29,7 @@ const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
  * the whole session should not die with it. When GEMINI_MODEL is set explicitly
  * we honor it and try nothing else; otherwise we walk this list in order.
  */
-const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+const FALLBACK_MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash'];
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 /** A retired/unknown model ID is worth retrying on a different model; a bad key or quota is not. */
@@ -64,8 +64,12 @@ export async function callGemini(params: {
   temperature?: number;
   maxOutputTokens?: number;
 }): Promise<GeminiResult> {
+  // A stale GEMINI_MODEL in .env.local must not hard-lock the app: try the
+  // preferred id first, then still fall through to the current models.
   const explicit = params.model || process.env.GEMINI_MODEL || '';
-  const models = explicit ? [explicit] : FALLBACK_MODELS;
+  const models = explicit
+    ? [explicit, ...FALLBACK_MODELS.filter((m) => m !== explicit)]
+    : FALLBACK_MODELS;
 
   let last: GeminiResult | null = null;
   for (const model of models) {
