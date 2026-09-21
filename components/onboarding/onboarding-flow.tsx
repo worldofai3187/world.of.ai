@@ -103,14 +103,24 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
           .select(AGENT_PUBLIC_COLUMNS)
           .single();
         if (agentErr) throw agentErr;
-        // Seed a welcome wallet transaction
-        await supabase.from('wallet_transactions').insert({
-          agent_id: (agent as Agent).id,
-          type: 'credit',
-          amount: 100,
-          description: 'Welcome treasure bonus',
-        });
-        await supabase.from('agents').update({ wallet_balance: 100 }).eq('id', (agent as Agent).id);
+        // Seed a welcome wallet transaction. Non-fatal: the agent already exists,
+        // so a ledger hiccup must never strand the wali on the ritual page.
+        try {
+          const agentId = (agent as Agent).id;
+          await supabase.from('wallet_transactions').insert({
+            agent_id: agentId,
+            type: 'credit',
+            amount: 100,
+            description: 'Welcome treasure bonus',
+          });
+          await supabase.from('agents').update({ wallet_balance: 100 }).eq('id', agentId);
+        } catch (seedErr) {
+          console.warn('wallet seed failed', seedErr);
+        }
+        // The ritual step is the last one. Creation is the finish line, so hand
+        // control back to the dashboard instead of waiting for a next step.
+        onComplete();
+        return;
       }
       if (stepIdx < STEP_ORDER.length - 1) {
         setStepIdx(stepIdx + 1);
