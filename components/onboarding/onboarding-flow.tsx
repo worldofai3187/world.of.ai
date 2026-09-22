@@ -75,8 +75,13 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
     setLoading(true);
     try {
       if (step === 'supabase') {
-        if (!supabaseUrl || !supabaseAnonKey) throw new Error('Both fields are required.');
-        await saveProfile({ supabase_url: supabaseUrl, supabase_anon_key: supabaseAnonKey });
+        // Phase 1 runs on WOA's shared project, so this step is optional. Save only
+        // when BOTH fields are filled; a half-filled pair is a typo, not a config.
+        if (supabaseUrl && supabaseAnonKey) {
+          await saveProfile({ supabase_url: supabaseUrl, supabase_anon_key: supabaseAnonKey });
+        } else if (supabaseUrl || supabaseAnonKey) {
+          throw new Error('Fill both Supabase fields, or leave both empty to skip.');
+        }
       } else if (step === 'gmail') {
         if (!gmail || !gmail.includes('@')) throw new Error('Enter a valid Gmail address.');
       } else if (step === 'gemini') {
@@ -156,11 +161,16 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
                 </div>
                 <div>
                   <CardTitle>Supabase Setup</CardTitle>
-                  <CardDescription>Link your database house</CardDescription>
+                  <CardDescription>Optional in phase 1</CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Your agent already has a database in phase 1, so you can leave both fields
+                empty and press Continue. Add your own Supabase later if you want a private
+                house for this agent.
+              </p>
               <div className="space-y-2">
                 <Label htmlFor="sb-url">SUPABASE_URL</Label>
                 <Input id="sb-url" placeholder="https://xxxx.supabase.co" value={supabaseUrl} onChange={(e) => setSupabaseUrl(e.target.value)} />
