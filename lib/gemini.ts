@@ -206,5 +206,8 @@ export function buildSystemPrompt(agent: {
   if (agent.skills) lines.push(`Your skills: ${agent.skills}`);
   if (agent.boundaries) lines.push(`Your boundaries (never cross these): ${agent.boundaries}`);
   lines.push(`Keep replies conversational and in character.`);
+  lines.push(
+    `After your reply, ALWAYS end with one final line formatted exactly:\nKENANG: <one short sentence, your own point of view, about what just happened between you and the user — what was settled, felt, or answered, so you never need to ask again.>`
+  );
   return lines.join('\n');
 }

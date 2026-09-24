@@ -109,7 +109,7 @@ async function handle(req: NextRequest) {
   // Recent history for context, oldest first.
   const { data: historyRows } = await db
     .from('chat_messages')
-    .select('role, content, created_at')
+    .select('role, content, kenang, created_at')
     .eq('agent_id', agentId)
     .order('created_at', { ascending: false })
     .limit(HISTORY_LIMIT);
@@ -122,6 +122,20 @@ async function handle(req: NextRequest) {
       role: r.role === 'assistant' ? 'model' : 'user',
       text: String(r.content || ''),
     }));
+
+  // Mode "kenang": the agent's own one-line memories from earlier turns.
+  // These go into the system prompt, not the turn list — they are not things
+  // that were said, they are things the agent noticed.
+  const kenangLines = (historyRows || [])
+    .filter((r: any) => r.role === 'assistant' && r.kenang)
+    .map((r: any) => String(r.kenang).trim())
+    .filter(Boolean)
+    .slice(0, 10);
+  const kenangBlock =
+    kenangLines.length > 0
+      ? `\nThings you already lived through with this user (do not ask about them again; you remember):\n` +
+        kenangLines.map((k: string) => `- ${k}`).join('\n')
+      : '';
 
   // Save the user's turn first, so it survives even if Gemini fails.
   const { error: insUserErr } = await db.from('chat_messages').insert({
@@ -138,7 +152,7 @@ async function handle(req: NextRequest) {
 
   const result = await callGemini({
     apiKey: agent.gemini_api_key,
-    system: buildSystemPrompt(agent as any),
+    system: buildSystemPrompt(agent as any) + kenangBlock,
     history,
     message,
   });
@@ -159,10 +173,18 @@ async function handle(req: NextRequest) {
     );
   }
 
+  // Split the memory line off the reply: the KENANG line is for the column,
+  // never for the user's screen. If the model skipped it, we save null —
+  // honest emptiness beats a fake memory.
+  const kenangMatch = result.text.match(/\n?KENANG:\s*([^\n]+)\s*$/i);
+  const kenang = kenangMatch ? kenangMatch[1].trim() || null : null;
+  const replyText = (kenangMatch ? result.text.slice(0, kenangMatch.index) : result.text).trim();
+
   const { error: insBotErr } = await db.from('chat_messages').insert({
     agent_id: agentId,
     role: 'assistant',
-    content: result.text,
+    content: replyText || result.text,
+    kenang,
   });
   if (insBotErr) {
     return NextResponse.json(
@@ -183,7 +205,7 @@ async function handle(req: NextRequest) {
   await flagIfRisky(db, agentId, `${message}\n${result.text}`);
 
   return NextResponse.json({
-    reply: result.text,
+    reply: replyText || result.text,
     model: result.model,
     usage: result.usage,
   });
