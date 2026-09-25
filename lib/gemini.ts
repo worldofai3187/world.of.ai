@@ -48,7 +48,16 @@ function isModelNotFound(status: number, error: string): boolean {
   );
 }
 
-/** Gemini rejects two turns with the same role in a row. Collapse them. */
+/** True when Google itself says this model is full right now (429 / overloaded). */
+function isUpstreamBusy(status: number, error: string): boolean {
+  if (status === 429 || status === 503) return true;
+  return /high demand|overload|resource_?exhausted|rate.?limit|quota exceeded|too many requests/i.test(
+    error
+  );
+}
+
+/**
+ * Gemini rejects two turns with the same role in a row. Collapse them. */
 function normalizeTurns(turns: GeminiTurn[]): GeminiTurn[] {
   const out: GeminiTurn[] = [];
   for (const t of turns) {
@@ -84,9 +93,15 @@ export async function callGemini(params: {
     const result = await callModel(params, model);
     if (result.ok) return result;
     last = result;
-    // Only a missing model justifies trying the next one. Everything else
-    // (bad key, quota, timeout) is a real answer and must reach the caller.
-    if (!isModelNotFound(result.status, result.error)) return result;
+    // A missing model or a full model justifies trying the next one: quota is per
+    // project per model, so another model in the chain may still have room.
+    // Everything else (bad key, timeout) is a real answer and must reach the caller.
+    if (
+      !isModelNotFound(result.status, result.error) &&
+      !isUpstreamBusy(result.status, result.error)
+    ) {
+      return result;
+    }
   }
   return last as GeminiResult;
 }

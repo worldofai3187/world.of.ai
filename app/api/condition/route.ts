@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     const since = new Date(Date.now() - LOOKBACK_MS).toISOString();
     const { data: rows, error: rowsErr } = await db
       .from('api_usage')
-      .select('created_at, total_tokens, model, ok')
+      .select('created_at, total_tokens, model, ok, error')
       .eq('agent_id', agentId)
       .gte('created_at', since)
       .order('created_at', { ascending: false })

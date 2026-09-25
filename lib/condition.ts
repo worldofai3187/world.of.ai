@@ -13,10 +13,12 @@ import { limitsFor, type ModelLimits } from './model-limits';
 export type UsageRow = {
   created_at: string;
   total_tokens: number | null;
+  ok?: boolean | null;
+  error?: string | null;
 };
 
 export type ConditionState = 'sehat' | 'pegal' | 'demam';
-export type BindingLimit = 'rpm' | 'tpm' | 'rpd';
+export type BindingLimit = 'rpm' | 'tpm' | 'rpd' | 'upstream';
 
 export type Condition = {
   model: string | null;
@@ -36,6 +38,15 @@ export type Condition = {
 
 const WINDOW_MS = 60_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** How long a Google "full" answer keeps the agent demam, even with quiet counters. */
+const STALL_WINDOW_MS = 10 * 60_000;
+
+/** The error wording Google actually sends when a model is full right now. */
+function isUpstreamBusyError(error: string): boolean {
+  return /high demand|overload|resource_?exhausted|rate.?limit|quota exceeded|too many requests|429/i.test(
+    error
+  );
+}
 
 export function computeCondition(
   rows: UsageRow[],
@@ -97,6 +108,34 @@ export function computeCondition(
     guidance = guidanceFor(binding, state === 'demam');
   }
 
+  // Google's own signal beats our arithmetic. If the last call to Gemini came back
+  // with 429 / "high demand", the model is full NOW even when our counters look fine
+  // (observed in production: usage sehat, call gagal). That is demam, period.
+  const stall = rows.find(
+    (row) =>
+      row.ok === false &&
+      isUpstreamBusyError(String(row.error || '')) &&
+      nowMs - Date.parse(row.created_at) <= STALL_WINDOW_MS
+  );
+  if (stall) {
+    return {
+      model,
+      limits,
+      rpm,
+      tpm,
+      rpd,
+      rpmPct,
+      tpmPct,
+      rpdPct,
+      binding: 'upstream',
+      state: 'demam',
+      label: 'Demam (Google bilang penuh)',
+      guidance:
+        'Google sendiri bilang model ini sedang penuh. Kalau WOA sudah otomatis pindah model, cek model mana yang baru saja menjawab di bawah. Kalau semuanya penuh, tunggu sebentar lalu coba lagi.',
+      windowSeconds: 60,
+    };
+  }
+
   return {
     model,
     limits,
@@ -115,6 +154,9 @@ export function computeCondition(
 }
 
 function guidanceFor(binding: BindingLimit, exhausted: boolean): string {
+  if (binding === 'upstream') {
+    return 'Google bilang model penuh. Tunggu sebentar, atau biarkan WOA pindah model otomatis.';
+  }
   if (binding === 'rpd') {
     return exhausted
       ? 'Kuota harian habis. Dua pilihan: mode istirahat sampai besok, atau ganti model (plafon harian model lain tetap ikut project yang sama).'
