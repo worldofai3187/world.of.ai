@@ -23,9 +23,11 @@ export const LITE_MODELS = [
 ];
 
 /** Signals that a message deserves the full Flash brain. */
+/** Signals that a message deserves the full Flash brain (analysis, code, debugging).
+ *  Storytelling and small talk stay on Lite — Rosa's split, 2026-09-26. */
 const DEEP_SIGNALS: RegExp[] = [
   /\b(jelaskan|analisis|analisa|bandingkan|evaluasi|kenapa|mengapa|gimana caranya|bagaimana caranya|buatkan|rancang|resep kode|debug|error|stack trace|refactor)\b/i,
-  /\b(explain|analyze|compare|why|how do i|how to|design|write a|create a|debug|refactor|code|script|essay|story|cerita|puisi|lirik)\b/i,
+  /\b(explain|analyze|compare|why|how do i|how to|design|write a|create a|debug|refactor|code|script)\b/i,
   /```/,
   /\n.{20,}\n.{20,}/, // three or more substantial lines = structured thought
 ];
