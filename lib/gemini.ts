@@ -66,6 +66,38 @@ function isUpstreamBusy(status: number, error: string): boolean {
 }
 
 /**
+ * Gemini occasionally hallucinates a tool call as plain text (observed live 2026-09-26:
+ * Orion leaked a YAML block with `search_queries:` to the user). We ship no tools, so
+ * any such block is noise from the model, not intent. Strip a leading one defensively.
+ */
+export function stripPhantomToolCall(text: string): string {
+  const t0 = text.replace(/^\uFEFF/, '').trim();
+  if (!/search_queries|function_call|tool_call|tools?\s*:/i.test(t0.slice(0, 300))) return t0;
+
+  // The block may or may not be fenced. Either way, everything up to the LAST
+  // standalone `---` line in the leading junk is tool-call noise; keep the rest.
+  const lines = t0.split('\n');
+  let lastSep = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*-{3,}\s*$/.test(lines[i])) lastSep = i;
+    // Stop scanning once normal prose starts after the junk signature appeared.
+    if (lastSep >= 0 && i > lastSep + 1 && !/^[-\s\w"':,{}\[\]\]\)`|>#-]*$/.test(lines[i])) break;
+  }
+  if (lastSep >= 0) {
+    const rest = lines.slice(lastSep + 1).join('\n').trim();
+    return rest || t0;
+  }
+
+  // No --- separator: try a fenced block.
+  const fenced = t0.match(/^(```|~~~)[\s\S]*?\1\s*/);
+  if (fenced && /search_queries|function_call|tool_call/i.test(fenced[0])) {
+    const rest = t0.slice(fenced[0].length).trim();
+    return rest || t0;
+  }
+  return t0;
+}
+
+/**
  * Gemini rejects two turns with the same role in a row. Collapse them. */
 function normalizeTurns(turns: GeminiTurn[]): GeminiTurn[] {
   const out: GeminiTurn[] = [];
@@ -186,10 +218,12 @@ async function callModel(
       };
     }
 
+    const clean = stripPhantomToolCall(text);
+
     const meta = json?.usageMetadata || {};
     return {
       ok: true,
-      text,
+      text: clean,
       model,
       usage: {
         promptTokens: Number(meta.promptTokenCount || 0),
@@ -230,6 +264,9 @@ export function buildSystemPrompt(agent: {
   if (agent.skills) lines.push(`Your skills: ${agent.skills}`);
   if (agent.boundaries) lines.push(`Your boundaries (never cross these): ${agent.boundaries}`);
   lines.push(`Keep replies conversational and in character.`);
+  lines.push(
+    `You have NO tools and NO search. Never output tool-call syntax of any kind: no function_calls blocks, no YAML/JSON with search_queries or tool names, no code fences containing system commands. If you do not know a fact, say so plainly or ask the user. Your reply is plain chat text only.`
+  );
   lines.push(
     `After your reply, ALWAYS end with one final line formatted exactly:\nKENANG: <one short sentence, your own point of view, about what just happened between you and the user — what was settled, felt, or answered, so you never need to ask again.>`
   );
