@@ -15,6 +15,7 @@ import { createClient } from '@supabase/supabase-js';
 import { callGemini, buildSystemPrompt, type GeminiTurn } from '@/lib/gemini';
 import { classifyTier, chainForTier } from '@/lib/routing';
 import { checkUserRate, USER_RATE_LIMITS } from '@/lib/rate-limit';
+import { maybeGrowMemory, retrieveRelevantKenang } from '@/lib/kenang';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -177,6 +178,15 @@ async function handle(req: NextRequest) {
         kenangLines.map((k: string) => `- ${k}`).join('\n')
       : '';
 
+  // Long-term memory, retrieval saat relevan: only validated kenang rows that
+  // actually overlap with this message enter the prompt. No overlap, no block.
+  const relevantKenang = await retrieveRelevantKenang(db, agentId, message);
+  const longTermBlock =
+    relevantKenang.length > 0
+      ? `\nLong-term memories about this user, relevant to what they just said:\n` +
+        relevantKenang.map((k: string) => `- ${k}`).join('\n')
+      : '';
+
   // Save the user's turn first, so it survives even if Gemini fails.
   const { error: insUserErr } = await db.from('chat_messages').insert({
     agent_id: agentId,
@@ -196,7 +206,7 @@ async function handle(req: NextRequest) {
 
   const result = await callGemini({
     apiKey: agent.gemini_api_key,
-    system: buildSystemPrompt(agent as any) + kenangBlock,
+    system: buildSystemPrompt(agent as any) + kenangBlock + longTermBlock,
     history,
     message,
     tier,
@@ -248,6 +258,11 @@ async function handle(req: NextRequest) {
   });
 
   await flagIfRisky(db, agentId, `${message}\n${result.text}`);
+
+  // The memory cycle: every 20 user messages, propose candidates -> validate
+  // -> store. Best-effort; failures are swallowed inside and never surface
+  // to the user.
+  await maybeGrowMemory(db, agentId, agent.gemini_api_key);
 
   return NextResponse.json({
     reply: replyText || result.text,
