@@ -16,9 +16,14 @@
 
 export type ModelTier = 'lite' | 'deep';
 
-/** Ordered lite chain. Unknown/retired ids are tolerated by the fallback walk. */
+/** Ordered lite chain, mirroring the Flash chain (3.8 -> 3.7 -> 3.6 -> 3.5).
+ *  Unknown/retired ids are tolerated by the fallback walk; a full lite tank
+ *  just walks down the chain and finally onto Flash. */
 export const LITE_MODELS = [
+  'gemini-3.8-flash-lite',
+  'gemini-3.7-flash-lite',
   'gemini-3.6-flash-lite',
+  'gemini-3.5-flash-lite',
   'gemini-2.5-flash-lite',
 ];
 
