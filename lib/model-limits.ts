@@ -14,8 +14,12 @@
 export type ModelLimits = { rpm: number; tpm: number; rpd: number };
 
 export const DEFAULT_MODEL_LIMITS: Record<string, ModelLimits> = {
-  'gemini-3.6-flash': { rpm: 10, tpm: 250_000, rpd: 250 },
-  'gemini-3.5-flash': { rpm: 10, tpm: 250_000, rpd: 250 },
+  // Real numbers from the AI Studio Rate Limit page, project "World of Ai"
+  // (gen-lang-client-0135236022), free tier, read 2026-09-26 by Rosa:
+  //   Gemini 3.6 Flash: RPM 5 · TPM 250,000 · RPD 20
+  // Page also showed a 300k TPM upper figure; the enforced cap is 250k, using that.
+  'gemini-3.6-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
+  'gemini-3.5-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
   'gemini-2.5-flash': { rpm: 10, tpm: 250_000, rpd: 250 },
 };
 
