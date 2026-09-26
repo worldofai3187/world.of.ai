@@ -31,7 +31,12 @@ const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
  * the whole session should not die with it. When GEMINI_MODEL is set explicitly
  * we honor it and try nothing else; otherwise we walk this list in order.
  */
-const FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
+const FALLBACK_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+];
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export { FALLBACK_MODELS };
