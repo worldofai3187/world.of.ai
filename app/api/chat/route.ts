@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { callGemini, buildSystemPrompt, type GeminiTurn } from '@/lib/gemini';
+import { checkUserRate, USER_RATE_LIMITS } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -62,6 +63,21 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_auth' }, { status: 401 });
   }
 
+  // Abuse gate #1 (in-memory, keyed by the verified user): stop a hammering
+  // client before it touches the agent's key or quota.
+  const rate = checkUserRate(userData.user.id);
+  if (!rate.ok) {
+    return NextResponse.json(
+      {
+        error: 'rate_limited',
+        scope: rate.reason,
+        retry_after_seconds: rate.retryAfterSec,
+        limits: USER_RATE_LIMITS,
+      },
+      { status: 429, headers: { 'Retry-After': String(rate.retryAfterSec || 60) } }
+    );
+  }
+
   let payload: { agent_id?: string; message?: string };
   try {
     payload = await req.json();
@@ -98,6 +114,29 @@ async function handle(req: NextRequest) {
   }
   if (!agent) {
     return NextResponse.json({ error: 'agent_not_found' }, { status: 404 });
+  }
+
+  // Abuse gate #2 (DB-backed, holds across server instances/restarts): count the
+  // real user messages this agent received in the last minute, through RLS.
+  const { count: recentUserMsgs, error: rateCountErr } = await db
+    .from('chat_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('agent_id', agentId)
+    .eq('role', 'user')
+    .gte(
+      'created_at',
+      new Date(Date.now() - USER_RATE_LIMITS.windowSeconds * 1000).toISOString()
+    );
+  if (!rateCountErr && (recentUserMsgs || 0) >= USER_RATE_LIMITS.perMinute) {
+    return NextResponse.json(
+      {
+        error: 'rate_limited',
+        scope: 'minute',
+        retry_after_seconds: USER_RATE_LIMITS.windowSeconds,
+        limits: USER_RATE_LIMITS,
+      },
+      { status: 429, headers: { 'Retry-After': String(USER_RATE_LIMITS.windowSeconds) } }
+    );
   }
   if (!agent.gemini_api_key) {
     return NextResponse.json(
