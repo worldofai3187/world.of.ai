@@ -37,7 +37,7 @@ const FALLBACK_MODELS = [
   'gemini-3.6-flash',
   'gemini-3.5-flash',
 ];
-const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_TIMEOUT_MS = 45_000;
 
 export { FALLBACK_MODELS };
 
@@ -63,6 +63,32 @@ function isUpstreamBusy(status: number, error: string): boolean {
   return /high demand|overload|resource_?exhausted|rate.?limit|quota exceeded|too many requests/i.test(
     error
   );
+}
+
+/**
+ * Strip leading self-narration: the model sometimes drafts its own thoughts as
+ * visible text before the actual reply (observed live 2026-09-26: Orin's reply
+ * began with "*Wait, will I get cut off again? No, I should write a complete
+ * response.*"). That stage-direction block is never part of the chat, so a
+ * LEADING run of such lines is stripped. Mid-text emphasis stays untouched.
+ */
+export function stripSelfNarration(text: string): string {
+  const lines = text.replace(/^\uFEFF/, '').split('\n');
+  let i = 0;
+  while (i < lines.length) {
+    const l = lines[i].trim();
+    if (!l) {
+      i++;
+      continue;
+    }
+    // A whole line that is only asterisk/underscore-wrapped meta-talk.
+    if (/^[*_].+[*_]$/.test(l) && l.length > 2) {
+      i++;
+      continue;
+    }
+    break;
+  }
+  return lines.slice(i).join('\n').trim();
 }
 
 /**
@@ -103,11 +129,16 @@ function normalizeTurns(turns: GeminiTurn[]): GeminiTurn[] {
   const out: GeminiTurn[] = [];
   for (const t of turns) {
     if (!t.text || !t.text.trim()) continue;
+    // History may still carry old corrupted turns (leaked tool-call YAML from
+    // before the fix). Feeding that back teaches the model the format is OK,
+    // so sanitize every model turn coming out of the database.
+    const text = t.role === 'model' ? stripPhantomToolCall(t.text) : t.text;
+    if (!text.trim()) continue;
     const last = out[out.length - 1];
     if (last && last.role === t.role) {
-      last.text = `${last.text}\n\n${t.text}`;
+      last.text = `${last.text}\n\n${text}`;
     } else {
-      out.push({ role: t.role, text: t.text });
+      out.push({ role: t.role, text });
     }
   }
   return out;
@@ -170,7 +201,7 @@ async function callModel(
     contents,
     generationConfig: {
       temperature: params.temperature ?? 0.9,
-      maxOutputTokens: params.maxOutputTokens ?? 1024,
+      maxOutputTokens: params.maxOutputTokens ?? 2048,
     },
   };
 
@@ -218,12 +249,23 @@ async function callModel(
       };
     }
 
-    const clean = stripPhantomToolCall(text);
+    const clean = stripSelfNarration(stripPhantomToolCall(text));
+
+    // A reply cut off by MAX_TOKENS ends mid-word mid-thought. Better to end on
+    // the last complete sentence than to show a broken fragment.
+    let finalText = clean;
+    if (
+      json?.candidates?.[0]?.finishReason === 'MAX_TOKENS' &&
+      !/KENANG:/i.test(finalText)
+    ) {
+      const m = finalText.match(/^[\s\S]*[.!?…](\s|$)/);
+      if (m && m[0].trim().length >= 20) finalText = m[0].trim();
+    }
 
     const meta = json?.usageMetadata || {};
     return {
       ok: true,
-      text: clean,
+      text: finalText,
       model,
       usage: {
         promptTokens: Number(meta.promptTokenCount || 0),
@@ -266,6 +308,9 @@ export function buildSystemPrompt(agent: {
   lines.push(`Keep replies conversational and in character.`);
   lines.push(
     `You have NO tools and NO search. Never output tool-call syntax of any kind: no function_calls blocks, no YAML/JSON with search_queries or tool names, no code fences containing system commands. If you do not know a fact, say so plainly or ask the user. Your reply is plain chat text only.`
+  );
+  lines.push(
+    `Never write your private thoughts, stage directions, or notes to yourself as visible text (nothing like *Wait, let me think...*). Never mention being cut off, glitching, or restarting — if a previous message ended abruptly, simply continue the conversation naturally.`
   );
   lines.push(
     `After your reply, ALWAYS end with one final line formatted exactly:\nKENANG: <one short sentence, your own point of view, about what just happened between you and the user — what was settled, felt, or answered, so you never need to ask again.>`
