@@ -16,7 +16,8 @@ export type ModelLimits = { rpm: number; tpm: number; rpd: number };
 export const DEFAULT_MODEL_LIMITS: Record<string, ModelLimits> = {
   // Verified against the AI Studio Rate Limit page, project "World of Ai"
   // (world.of.ai.3187@gmail.com), free tier — 5 screenshots from Rosa, 2026-09-26.
-  // Models showing 0/0 (no free quota): 2.5 Pro, 3.1 Pro, Deep Research, Nano Banana Pro, Veo 3.
+  // Free tier only. Models with no free quota (0/0) are deliberately absent;
+  // never add them unless billing is actually enabled on this project.
   // Not listed as free TEXT models: 3.6/3.7/3.8 Flash Lite (only the TTS variant exists).
   'gemini-3.8-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
   'gemini-3.7-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
