@@ -61,12 +61,27 @@
     background-clip: text;
     -webkit-text-fill-color: transparent;
   }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-slim {
+    -ms-overflow-style: auto;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
+  }
+  .scrollbar-slim::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scrollbar-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-slim::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.4);
+    border-radius: 3px;
   }
 }
 

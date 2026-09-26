@@ -91,7 +91,7 @@ export function ChatApp({ agent }: { agent: Agent }) {
         <ConditionChip agent={agent} />
       </div>
 
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto scrollbar-hide min-h-[300px] max-h-[400px]">
+      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto scrollbar-slim min-h-[300px] max-h-[70vh]">
         {loading ? (
           <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
         ) : messages.length === 0 ? (
