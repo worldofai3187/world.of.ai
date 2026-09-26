@@ -7,6 +7,8 @@
  *  - Errors come back as data, never as a thrown surprise.
  */
 
+import { chainForTier } from '@/lib/routing';
+
 export type GeminiUsage = {
   promptTokens: number;
   outputTokens: number;
@@ -31,6 +33,8 @@ const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
  */
 const FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
 const DEFAULT_TIMEOUT_MS = 30_000;
+
+export { FALLBACK_MODELS };
 
 /**
  * A retired/unknown model ID is worth retrying on a different model; a bad key or quota is not.
@@ -80,13 +84,13 @@ export async function callGemini(params: {
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  /** 'deep' (default) starts on the full Flash chain; 'lite' tries the Lite models first. */
+  tier?: import('@/lib/routing').ModelTier;
 }): Promise<GeminiResult> {
-  // A stale GEMINI_MODEL in .env.local must not hard-lock the app: try the
-  // preferred id first, then still fall through to the current models.
   const explicit = params.model || process.env.GEMINI_MODEL || '';
   const models = explicit
     ? [explicit, ...FALLBACK_MODELS.filter((m) => m !== explicit)]
-    : FALLBACK_MODELS;
+    : chainForTier(params.tier ?? 'deep', FALLBACK_MODELS);
 
   let last: GeminiResult | null = null;
   for (const model of models) {

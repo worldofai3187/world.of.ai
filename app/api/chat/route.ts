@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { callGemini, buildSystemPrompt, type GeminiTurn } from '@/lib/gemini';
+import { classifyTier, chainForTier } from '@/lib/routing';
 import { checkUserRate, USER_RATE_LIMITS } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
@@ -189,11 +190,16 @@ async function handle(req: NextRequest) {
     );
   }
 
+  // Model routing: everyday chat spends the Lite tank, serious work spends Flash.
+  // The tier is decided here, server-side, by a cheap heuristic — never by an AI call.
+  const tier = classifyTier(message);
+
   const result = await callGemini({
     apiKey: agent.gemini_api_key,
     system: buildSystemPrompt(agent as any) + kenangBlock,
     history,
     message,
+    tier,
   });
 
   if (!result.ok) {
@@ -246,6 +252,7 @@ async function handle(req: NextRequest) {
   return NextResponse.json({
     reply: replyText || result.text,
     model: result.model,
+    tier,
     usage: result.usage,
   });
 }
