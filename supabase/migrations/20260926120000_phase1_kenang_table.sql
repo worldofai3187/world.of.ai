@@ -39,13 +39,13 @@ CREATE POLICY "kenang_owner_rw" ON kenang
   USING (
     EXISTS (
       SELECT 1 FROM agents a
-      WHERE a.id = kenang.agent_id AND a.wali_id = auth.uid()
+      WHERE a.id = kenang.agent_id AND a.user_id = auth.uid()
     )
   )
   WITH CHECK (
     EXISTS (
       SELECT 1 FROM agents a
-      WHERE a.id = kenang.agent_id AND a.wali_id = auth.uid()
+      WHERE a.id = kenang.agent_id AND a.user_id = auth.uid()
     )
   );
 
