@@ -13,8 +13,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Database, Mail, Key, Sparkles, User, Heart, ThumbsDown, Wrench, ShieldAlert, ScrollText, Check, Loader2, ChevronRight, ChevronLeft } from 'lucide-react';
 
-type Step = 'supabase' | 'gmail' | 'gemini' | 'ritual' | 'done';
-const STEP_ORDER: Step[] = ['supabase', 'gmail', 'gemini', 'ritual'];
+type Step = 'invite' | 'supabase' | 'gmail' | 'gemini' | 'ritual' | 'done';
+const STEP_ORDER: Step[] = ['invite', 'supabase', 'gmail', 'gemini', 'ritual'];
 
 // A free-text field should never fail because of a stray comma. Split on commas
 // or newlines, trim, drop empties, rejoin — so "web search, coding, " is valid.
@@ -46,10 +46,21 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
   const [ethicsAgreed, setEthicsAgreed] = useState(false);
 
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [inviteCode, setInviteCode] = useState('');
 
   useEffect(() => {
     (async () => {
       if (!user) return;
+      // Invite gate: skip the code step if this user already redeemed one.
+      // If the RPC is missing (migration not applied yet), fail OPEN so the
+      // wali's own onboarding never bricks before they run the migration.
+      try {
+        const { data: redeemed } = await supabase.rpc('invite_redeemed');
+        if (redeemed === true) setStepIdx((i) => (i === 0 ? 1 : i));
+      } catch {
+        console.warn('invite_redeemed unavailable; invite step shown');
+      }
+
       const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
       if (data) {
         setProfile(data as Profile);
@@ -74,7 +85,13 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
     setError(null);
     setLoading(true);
     try {
-      if (step === 'supabase') {
+      if (step === 'invite') {
+        const { data: ok, error: rpcErr } = await supabase.rpc('redeem_invite', {
+          p_code: inviteCode,
+        });
+        if (rpcErr) throw new Error('Invite check failed. Try again.');
+        if (!ok) throw new Error('Invite code invalid or already used.');
+      } else if (step === 'supabase') {
         // Phase 1 runs on WOA's shared project, so this step is optional. Save only
         // when BOTH fields are filled; a half-filled pair is a typo, not a config.
         if (supabaseUrl && supabaseAnonKey) {
@@ -151,6 +168,27 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
           <p className="text-sm text-muted-foreground">Step {stepIdx + 1} of {STEP_ORDER.length}</p>
           <Progress value={progress} className="h-2" />
         </div>
+
+        {step === 'invite' && (
+          <Card className="glass border-border/50">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <Key className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle>Invite Code</CardTitle>
+                  <CardDescription>World of AI is in closed testing. You need an invite code from the team to continue.</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Label htmlFor="invite">Invite Code</Label>
+              <Input id="invite" placeholder="WOA-XXXX-XXXX" value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} />
+              <p className="text-xs text-muted-foreground">One code per person. Ask the team if you don't have one yet.</p>
+            </CardContent>
+          </Card>
+        )}
 
         {step === 'supabase' && (
           <Card className="glass border-border/50">
