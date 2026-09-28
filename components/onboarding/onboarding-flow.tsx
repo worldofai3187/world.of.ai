@@ -44,6 +44,9 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
   const [skills, setSkills] = useState('');
   const [boundaries, setBoundaries] = useState('');
   const [ethicsAgreed, setEthicsAgreed] = useState(false);
+  // Advanced BYO-Supabase fields stay hidden by default: the agent already has
+  // a database in phase 1, and staring at raw keys is where new walis give up.
+  const [showSupabaseAdvanced, setShowSupabaseAdvanced] = useState(false);
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [inviteCode, setInviteCode] = useState('');
@@ -198,25 +201,35 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
                   <Database className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <CardTitle>Supabase Setup</CardTitle>
-                  <CardDescription>Optional in phase 1</CardDescription>
+                  <CardTitle>Database</CardTitle>
+                  <CardDescription>Already set up — nothing to type</CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-xs text-muted-foreground">
-                Your agent already has a database in phase 1, so you can leave both fields
-                empty and press Continue. Add your own Supabase later if you want a private
-                house for this agent.
+                Your agent already has a home in phase 1. Just press Continue — you can
+                connect your own Supabase later if you ever want a private house.
               </p>
-              <div className="space-y-2">
-                <Label htmlFor="sb-url">SUPABASE_URL</Label>
-                <Input id="sb-url" placeholder="https://xxxx.supabase.co" value={supabaseUrl} onChange={(e) => setSupabaseUrl(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sb-key">SUPABASE_ANON_KEY</Label>
-                <Input id="sb-key" placeholder="eyJhbGci…" value={supabaseAnonKey} onChange={(e) => setSupabaseAnonKey(e.target.value)} />
-              </div>
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline underline-offset-2"
+                onClick={() => setShowSupabaseAdvanced((v) => !v)}
+              >
+                {showSupabaseAdvanced ? 'Hide advanced setup' : 'Connect my own Supabase (advanced)'}
+              </button>
+              {showSupabaseAdvanced && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="sb-url">SUPABASE_URL</Label>
+                    <Input id="sb-url" placeholder="https://xxxx.supabase.co" value={supabaseUrl} onChange={(e) => setSupabaseUrl(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sb-key">SUPABASE_ANON_KEY</Label>
+                    <Input id="sb-key" placeholder="eyJhbGci…" value={supabaseAnonKey} onChange={(e) => setSupabaseAnonKey(e.target.value)} />
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         )}
