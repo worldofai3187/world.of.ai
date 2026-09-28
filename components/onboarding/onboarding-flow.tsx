@@ -37,6 +37,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
   const [supabaseAnonKey, setSupabaseAnonKey] = useState('');
   const [gmail, setGmail] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
+  const [geminiValidating, setGeminiValidating] = useState(false);
   const [agentName, setAgentName] = useState('');
   const [personality, setPersonality] = useState('');
   const [likes, setLikes] = useState('');
@@ -105,7 +106,26 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
       } else if (step === 'gmail') {
         if (!gmail || !gmail.includes('@')) throw new Error('Enter a valid Gmail address.');
       } else if (step === 'gemini') {
-        if (!geminiKey || geminiKey.length < 10) throw new Error('Enter a valid Gemini API key.');
+        // Empty key = explicit skip (the card says so). A filled key is validated
+        // NOW, at the paste, so a typo never survives to the first chat.
+        if (geminiKey.trim()) {
+          setGeminiValidating(true);
+          const { data: sessionData } = await supabase.auth.getSession();
+          const res = await fetch('/api/validate-gemini', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${sessionData?.session?.access_token ?? ''}`,
+            },
+            body: JSON.stringify({ key: geminiKey.trim() }),
+          });
+          const verdict = await res.json().catch(() => ({}));
+          if (!res.ok || !verdict.ok) {
+            throw new Error(
+              'Gemini key not working yet — ' + (verdict.detail || 'double-check the key.')
+            );
+          }
+        }
       } else if (step === 'ritual') {
         if (!agentName.trim()) throw new Error('Give your agent a name.');
         if (!ethicsAgreed) throw new Error('You must accept the Ethics Contract.');
@@ -122,7 +142,9 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
             boundaries: cleanList(boundaries),
             ethics_agreed: ethicsAgreed,
             gmail,
-            gemini_api_key: geminiKey,
+            // A skipped key is stored as NULL, not '' — gemini_key_set (a generated
+            // column keyed on IS NOT NULL) must read false, or the dashboard lies.
+            gemini_api_key: geminiKey.trim() || null,
             onboarding_complete: true,
           })
           .select(AGENT_PUBLIC_COLUMNS)
@@ -154,6 +176,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
       setError(e.message || 'Something went wrong.');
     } finally {
       setLoading(false);
+      setGeminiValidating(false);
     }
   };
 
@@ -265,17 +288,35 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
                   <Key className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <CardTitle>Agent Gemini API</CardTitle>
-                  <CardDescription>The brain for this agent</CardDescription>
+                  <CardTitle>Your Agent&apos;s Brain (Gemini)</CardTitle>
+                  <CardDescription>Free, under your own Google account — one paste, 2 minutes.</CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="gemini">GEMINI_API_KEY</Label>
-                <Input id="gemini" type="password" placeholder="AIza…" value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} />
-                <p className="text-xs text-muted-foreground">Each agent uses its own dedicated Gemini quota.</p>
+                <p className="text-xs text-muted-foreground">
+                  The brain runs on Gemini with your own free quota, so it stays 100% yours and nobody else can burn it.
+                </p>
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 text-sm font-medium text-primary underline underline-offset-4"
+                >
+                  1. Open aistudio.google.com → "Create API key" → copy
+                </a>
+                <div className="space-y-2">
+                  <Label htmlFor="gemini">2. Paste your Gemini API key here</Label>
+                  <Input id="gemini" type="password" placeholder="AIza…" value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  We test the key right away — if it doesn&apos;t work, you&apos;ll know here, not later in the chat.
+                </p>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Rather skip? Continue without a key — your agent just can&apos;t talk yet, and we&apos;ll remind you gently.
+              </p>
             </CardContent>
           </Card>
         )}
@@ -298,7 +339,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
           <Button variant="ghost" onClick={handleBack} disabled={stepIdx === 0 || loading}>
             <ChevronLeft className="h-4 w-4" /> Back
           </Button>
-          <Button onClick={handleNext} disabled={loading}>
+          <Button onClick={handleNext} disabled={loading || geminiValidating}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : stepIdx === STEP_ORDER.length - 1 ? (
               <><Sparkles className="h-4 w-4" /> Create Agent</>
             ) : (

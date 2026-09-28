@@ -73,7 +73,11 @@ export function ChatApp({ agent }: { agent: Agent }) {
         const fallback = raw
           ? `HTTP ${res.status}: ${raw.slice(0, 300)}`
           : `HTTP ${res.status}`;
-        throw new Error(data?.detail || data?.error || fallback);
+        throw new Error(
+          data?.error === 'agent_has_no_gemini_key'
+            ? 'Your agent doesn\'t have a Gemini key yet, so it can\'t speak. Get a free key at aistudio.google.com ("Create API key"), and add it from the agent\'s profile — 2 minutes, then come back.'
+            : (data?.detail || data?.error || fallback)
+        );
       }
       await load();
     } catch (err: any) {
