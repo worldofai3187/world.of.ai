@@ -315,7 +315,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
                 </p>
               </div>
               <p className="text-xs text-muted-foreground">
-                Rather skip? Continue without a key — your agent just can&apos;t talk yet, and we&apos;ll remind you gently.
+                Rather skip? Continue without a key — trial mode: your agent can still chat, up to 10 messages a day on the app&apos;s key. Add your own key anytime for the full quota.
               </p>
             </CardContent>
           </Card>

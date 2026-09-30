@@ -22,6 +22,7 @@ export const dynamic = 'force-dynamic';
 
 const HISTORY_LIMIT = 20;
 const MAX_MESSAGE_CHARS = 4000;
+const TRIAL_DAILY_LIMIT = 10; // trial-mode chats per agent per UTC day
 
 export async function POST(req: NextRequest) {
   // Any crash below must reach the browser as readable JSON, never as an HTML
@@ -140,11 +141,35 @@ async function handle(req: NextRequest) {
       { status: 429, headers: { 'Retry-After': String(USER_RATE_LIMITS.windowSeconds) } }
     );
   }
-  if (!agent.gemini_api_key) {
-    return NextResponse.json(
-      { error: 'agent_has_no_gemini_key' },
-      { status: 400 }
-    );
+  // Trial mode ("coba dulu"): an agent without its own key can still chat on
+  // the app's shared server key (GEMINI_SERVER_KEY env), capped tightly per
+  // agent per day. Quota is the app owner's, so the cap is the honest price
+  // of skipping the key step — not free unlimited chat.
+  const usingTrial = !agent.gemini_api_key;
+  let apiKey = agent.gemini_api_key as string | null;
+  if (usingTrial) {
+    const serverKey = (process.env.GEMINI_SERVER_KEY || '').trim();
+    if (!serverKey) {
+      return NextResponse.json(
+        { error: 'agent_has_no_gemini_key' },
+        { status: 400 }
+      );
+    }
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const { count: trialToday, error: trialErr } = await db
+      .from('chat_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('agent_id', agentId)
+      .eq('role', 'user')
+      .gte('created_at', dayStart.toISOString());
+    if (!trialErr && (trialToday || 0) >= TRIAL_DAILY_LIMIT) {
+      return NextResponse.json(
+        { error: 'trial_limit_reached', trial_daily_limit: TRIAL_DAILY_LIMIT },
+        { status: 429, headers: { 'Retry-After': '3600' } }
+      );
+    }
+    apiKey = serverKey;
   }
 
   // Recent history for context, oldest first.
@@ -205,7 +230,7 @@ async function handle(req: NextRequest) {
   const tier = classifyTier(message);
 
   const result = await callGemini({
-    apiKey: agent.gemini_api_key,
+    apiKey: apiKey as string,
     system: buildSystemPrompt(agent as any) + kenangBlock + longTermBlock,
     history,
     message,
@@ -262,7 +287,7 @@ async function handle(req: NextRequest) {
   // The memory cycle: every 20 user messages, propose candidates -> validate
   // -> store. Best-effort; failures are swallowed inside and never surface
   // to the user.
-  await maybeGrowMemory(db, agentId, agent.gemini_api_key);
+  await maybeGrowMemory(db, agentId, apiKey as string);
 
   return NextResponse.json({
     reply: replyText || result.text,

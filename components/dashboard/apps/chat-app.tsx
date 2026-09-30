@@ -74,8 +74,10 @@ export function ChatApp({ agent }: { agent: Agent }) {
           ? `HTTP ${res.status}: ${raw.slice(0, 300)}`
           : `HTTP ${res.status}`;
         throw new Error(
-          data?.error === 'agent_has_no_gemini_key'
-            ? 'Your agent doesn\'t have a Gemini key yet, so it can\'t speak. Get a free key at aistudio.google.com ("Create API key"), and add it from the agent\'s profile — 2 minutes, then come back.'
+          data?.error === 'trial_limit_reached'
+            ? `Trial mode for the day is used up (10 chats). Add your own free Gemini key at aistudio.google.com to keep going — 2 minutes, then come back.`
+            : data?.error === 'agent_has_no_gemini_key'
+            ? 'Your agent doesn\'t have a Gemini key yet and trial mode isn\'t set up. Get a free key at aistudio.google.com ("Create API key"), and add it from the agent\'s profile — 2 minutes, then come back.'
             : (data?.detail || data?.error || fallback)
         );
       }
