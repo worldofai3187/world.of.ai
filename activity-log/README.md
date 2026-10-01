@@ -20,4 +20,4 @@ Rules:
 - trial mode: agents without a key can chat on a shared server key, 10/day per agent, capped server-side — 34ccceb
 - onboarding: friendly Gemini step (direct AI Studio link, instant key validation, skip allowed) — b2b145c
 - onboarding: BYO Supabase keys hidden behind advanced toggle — 04f6a5c (pushed 2026-09-28)
-- activity-log: this file, first entry — <this commit>
+- activity-log: this file, first entry — f90a3be (template pushed as f90a3be; template entry refers to itself)
