@@ -273,6 +273,19 @@ async function handle(req: NextRequest) {
     );
   }
 
+  // Switch log (Rosa, 2026-10-14): when the fallback chain moved models, one
+  // append-only row lands in model_switches. Best-effort — a logging failure
+  // must never eat a good reply.
+  if (result.switchedFrom) {
+    await db.from('model_switches').insert({
+      agent_id: agentId,
+      wali_id: userData.user.id,
+      from_model: result.switchedFrom,
+      to_model: result.model,
+      alasan: result.switchReason,
+    });
+  }
+
   await db.from('api_usage').insert({
     agent_id: agentId,
     model: result.model,
@@ -292,6 +305,8 @@ async function handle(req: NextRequest) {
   return NextResponse.json({
     reply: replyText || result.text,
     model: result.model,
+    switched_from: result.switchedFrom || null,
+    switch_reason: result.switchReason || null,
     tier,
     usage: result.usage,
   });

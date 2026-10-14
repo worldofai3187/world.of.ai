@@ -21,7 +21,16 @@ export type GeminiTurn = {
 };
 
 export type GeminiResult =
-  | { ok: true; text: string; usage: GeminiUsage; model: string }
+  | {
+      ok: true;
+      text: string;
+      usage: GeminiUsage;
+      model: string;
+      /** Set when the chain moved off the first model it tried. */
+      switchedFrom?: string;
+      /** Why it moved: a retired/missing model or a full upstream. */
+      switchReason?: 'model_not_found' | 'upstream_busy';
+    }
   | { ok: false; model: string; status: number; error: string };
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -161,9 +170,22 @@ export async function callGemini(params: {
     : chainForTier(params.tier ?? 'deep', FALLBACK_MODELS);
 
   let last: GeminiResult | null = null;
+  // Switch trace (Rosa, 2026-10-14): every move off the first model is
+  // reported back so route.ts can log it to model_switches. The handoff
+  // itself needs no special payload — system prompt + history are rebuilt
+  // fresh for every attempt below, so a fallback model never starts cold.
+  const firstModel = models[0];
   for (const model of models) {
     const result = await callModel(params, model);
-    if (result.ok) return result;
+    if (result.ok) {
+      if (model !== firstModel) {
+        const reason = isModelNotFound(last?.status ?? 0, last?.error ?? '')
+          ? ('model_not_found' as const)
+          : ('upstream_busy' as const);
+        return { ...result, switchedFrom: firstModel, switchReason: reason };
+      }
+      return result;
+    }
     last = result;
     // A missing model or a full model justifies trying the next one: quota is per
     // project per model, so another model in the chain may still have room.
