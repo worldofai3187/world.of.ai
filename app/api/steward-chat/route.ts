@@ -26,7 +26,7 @@ export const dynamic = 'force-dynamic';
 
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_HISTORY_TURNS = 20;
-const DAILY_LIMIT = 10; // chats per IP per UTC day
+const DAILY_LIMIT = parseInt(process.env.STEWARD_DAILY_LIMIT || '10', 10); // chats per IP per UTC day, env-overridable
 
 // In-memory IP rate limit. Holds per server instance; a restart resets it,
 // which is the accepted trade for a stateless public endpoint with no auth.
