@@ -15,7 +15,13 @@ import { createClient } from '@supabase/supabase-js';
 import { callGemini, buildSystemPrompt, type GeminiTurn } from '@/lib/gemini';
 import { classifyTier, chainForTier } from '@/lib/routing';
 import { checkUserRate, USER_RATE_LIMITS } from '@/lib/rate-limit';
-import { maybeGrowMemory, retrieveRelevantKenang } from '@/lib/kenang';
+import {
+  maybeGrowMemory,
+  retrieveRelevantKenang,
+  countUserMessages,
+  KENANG_EVERY,
+} from '@/lib/kenang';
+import { parseReplyMetadata } from '@/lib/reply-metadata';
 import {
   readMemoryBeforeReply,
   buildMemoryBlock,
@@ -270,37 +276,19 @@ async function handle(req: NextRequest) {
     );
   }
 
-  // Split the memory and heartbeat lines off the reply: KENANG is for the
+  // Split the memory and heartbeat lines off the reply. KENANG is for the
   // column, EMOSI is for the per-body state table. Neither reaches the user's
-  // screen. If the model skipped a line, we save nothing — honest emptiness
-  // beats a fake memory or a fake heartbeat.
-  let textForParse = result.text;
-  let replyText = textForParse.trim();
-
-  const kenangMatch = replyText.match(/\n?KENANG:\s*([^\n]+)\s*$/i);
-  const kenang = kenangMatch ? kenangMatch[1].trim() || null : null;
-  if (kenangMatch) replyText = replyText.slice(0, kenangMatch.index).trim();
-
-  const emosiMatch = replyText.match(/\n?EMOSI:\s*([^\n]+)\s*$/i);
-  let emosiWord: string | null = null;
-  let emosiIntensity: number | null = null;
-  if (emosiMatch) {
-    const parts = emosiMatch[1].trim().split(/\s+/);
-    const last = parts[parts.length - 1];
-    const n = Number(last);
-    if (Number.isFinite(n) && n >= 0 && n <= 10 && parts.length > 1) {
-      emosiIntensity = n;
-      emosiWord = parts.slice(0, -1).join(' ');
-    } else {
-      emosiWord = emosiMatch[1].trim() || null;
-    }
-    replyText = replyText.slice(0, emosiMatch.index).trim();
-  }
+  // screen, in either order. An invalid EMOSI is dropped entirely — honest
+  // emptiness beats a fake memory or a half-saved heartbeat. The reply text
+  // itself stays intact and never empty (see lib/reply-metadata.ts).
+  const parsed = parseReplyMetadata(result.text);
+  const replyText = parsed.reply;
+  const kenang = parsed.kenang;
 
   const { error: insBotErr } = await db.from('chat_messages').insert({
     agent_id: agentId,
     role: 'assistant',
-    content: replyText || result.text,
+    content: replyText,
     kenang,
   });
   if (insBotErr) {
@@ -338,25 +326,55 @@ async function handle(req: NextRequest) {
   // conversation (Rosa's flow: diperbarui setelah percakapan). It affects the
   // NEXT reply because readMemoryBeforeReply reads it (with decay) before the
   // model answers. Best-effort; failures are swallowed inside.
-  if (emosiWord) {
-    await upsertBodyState(db, agentId, author, emosiWord, emosiIntensity ?? 3);
+  if (parsed.emosiWord) {
+    await upsertBodyState(
+      db,
+      agentId,
+      author,
+      parsed.emosiWord,
+      parsed.emosiIntensity ?? 3
+    );
   }
 
   // The memory cycle: every 20 user messages, propose candidates -> validate
   // -> store. Best-effort; failures are swallowed inside and never surface
   // to the user.
-  await maybeGrowMemory(db, agentId, apiKey as string);
+  await maybeGrowMemory(db, agentId, apiKey as string, author);
 
   // The ringkasan layer: on the same 20-message beat, one summary row for this
-  // body, built from what the agent itself wrote in kenang. Cheap (no extra
+  // body. The threshold count comes from the DATABASE (countUserMessages),
+  // never from historyRows — that window is capped at HISTORY_LIMIT rows and
+  // mixes roles, so it is not a real conversation count. A dedup check (user
+  // messages since the last summary) stops a retry or a second request from
+  // summarizing the same threshold twice. Built from the kenang lines the
+  // agent actually wrote; no kenang, no fake or empty summary. Cheap (no extra
   // Gemini call) and best-effort.
   if (kenangLines.length > 0) {
-    const windowSize = 20;
-    const userCount = historyRows
-      ? (historyRows as any[]).filter((r: any) => r.role === 'user').length
-      : 0;
-    if (userCount > 0 && userCount % windowSize === 0) {
-      await writeRingkasan(db, agentId, author, kenangLines.slice(0, 10).join(' '));
+    const total = await countUserMessages(db, agentId);
+    if (total > 0 && total % KENANG_EVERY === 0) {
+      const { data: lastSummaryRow } = await db
+        .from('ringkasan')
+        .select('created_at')
+        .eq('agent_id', agentId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const { count: usersSinceSummary } = await db
+        .from('chat_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('agent_id', agentId)
+        .eq('role', 'user')
+        .gte(
+          'created_at',
+          lastSummaryRow?.[0]?.created_at || '1970-01-01'
+        );
+      if ((usersSinceSummary || 0) >= KENANG_EVERY) {
+        await writeRingkasan(
+          db,
+          agentId,
+          author,
+          kenangLines.slice(0, 10).join(' ')
+        );
+      }
     }
   }
 

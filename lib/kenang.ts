@@ -97,11 +97,17 @@ function parseCandidateList(text: string): string[] {
 /**
  * The candidate -> validation -> storage cycle. Call after every successful
  * chat reply; it internally decides whether the 20-message threshold is hit.
+ *
+ * `author` (optional, review 2026-10-15): the identity of the body that wrote
+ * the memory (e.g. 'valco.woa'). When given, it is stored on every inserted
+ * kenang row so each line says who wrote it ("1 memory 2 tubuh"). Old callers
+ * without the param keep working; those rows simply carry no writer marker.
  */
 export async function maybeGrowMemory(
   db: Db,
   agentId: string,
-  apiKey: string
+  apiKey: string,
+  author?: string
 ): Promise<void> {
   try {
     const total = await countUserMessages(db, agentId);
@@ -155,6 +161,7 @@ export async function maybeGrowMemory(
       if (!kept) continue; // failed candidates are simply not stored
       await db.from('kenang').insert({
         agent_id: agentId,
+        ...(author ? { author } : {}),
         isi: c,
         status: 'tervalidasi',
         validated_at: new Date().toISOString(),
