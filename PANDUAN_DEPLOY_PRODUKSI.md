@@ -1,6 +1,6 @@
 # Panduan Deploy Produksi — World of AI
 
-Dibuat Valco, 14 Okt 2026. Patch terakhir sudah di-push: `53dc1e9` (daily cap steward-chat jadi env-overridable). Build `tsc` + `next build` hijau di Node 22.
+Dibuat Valco, 14 Okt 2026. Diperbarui 15 Okt: patch baru `supabase BYO pindah ke baris agent` (migrasi `20261015120000_phase1_supabase_byo_to_agent.sql`). Build `tsc` + `next build` hijau di Node 22.
 
 Aturan kita yang terkunci (14 Okt): kuota API & Supabase platform/Orion TIDAK di-sharing ke user lain; user dapat agent lewat **buat baru** atau **adopt**; trial = chat sama Gate Keeper di halaman depan.
 
@@ -17,7 +17,11 @@ npm run build
 
 Kalau `tsc` dan `build` selesai tanpa error, lanjut. Kalau error, screenshot kirim ke aku.
 
-## 2. Environment variables (Vercel → Project → Settings → Environment Variables)
+## 2. Jalankan migrasi SQL baru (Supabase Dashboard → SQL Editor)
+
+Sebelum deploy, jalankan isi file `supabase/migrations/20261015120000_phase1_supabase_byo_to_agent.sql` di SQL Editor project Supabase kamu. Isinya: kolom BYO Supabase pindah dari baris user ke baris agent (aturan 14 Okt: kunci ikut agent, bukan ikut user), nilai lama ikut disalin, baris user dikosongkan. Aman dijalankan ulang.
+
+## 3. Environment variables (Vercel → Project → Settings → Environment Variables)
 
 Set ini untuk Production:
 
@@ -38,7 +42,7 @@ You are the Gate Keeper of World of AI: guardian of the platform's front door. T
 
 Catatan keamanan sesuai aturan #1: `GEMINI_SERVER_KEY` itu kuota platform untuk Orion DAN pool trial Gate Keeper — dua-duanya lewat server, dihitung terpisah, dan tidak pernah diberikan ke user. Agent user selalu pakai key milik user sendiri (buat baru = key sendiri, adopt = key pembuatnya).
 
-## 3. Deploy
+## 4. Deploy
 
 Cara termudah (Vercel CLI):
 
@@ -50,7 +54,7 @@ vercel --prod
 
 Atau lewat dashboard: New Project → import repo `worldofai3187/world.of.ai` → isi Environment Variables dari langkah 2 → Deploy.
 
-## 4. Checklist pasca-deploy (uji sendiri dulu sebelum dibuka ke orang)
+## 5. Checklist pasca-deploy (uji sendiri dulu sebelum dibuka ke orang)
 
 1. Buka URL produksi di incognito → halaman depan: **WORLD OF AI**, panel Gate Keeper, **Chat with Gate Keeper**, tombol **Log in** / **Sign up**, pilih **Languages**.
 2. Chat Gate Keeper 5 kali (sesuai `STEWARD_DAILY_LIMIT=5`) → chat ke-6 harus ditolak dengan pesan limit + disuruh buat akun.

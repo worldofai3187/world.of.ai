@@ -35,6 +35,12 @@ export type Agent = {
   gemini_key_set: boolean;
   wallet_balance: number;
   onboarding_complete: boolean;
+  // BYO Supabase lives on the agent row (Rosa's rule: the keys travel WITH the
+  // agent, so adoption carries its own database). Raw anon key is NOT in
+  // AGENT_PUBLIC_COLUMNS; the browser only pre-fills the onboarding form from
+  // the wali's own RLS-scoped read.
+  supabase_url: string | null;
+  supabase_anon_key: string | null;
   created_at: string;
 };
 
@@ -42,8 +48,6 @@ export type Profile = {
   id: string;
   display_name: string | null;
   guardian_pin_hash: string | null;
-  supabase_url: string | null;
-  supabase_anon_key: string | null;
 };
 
 export type Job = {

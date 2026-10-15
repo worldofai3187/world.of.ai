@@ -68,8 +68,20 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
       const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
       if (data) {
         setProfile(data as Profile);
-        setSupabaseUrl(data.supabase_url || '');
-        setSupabaseAnonKey(data.supabase_anon_key || '');
+      }
+
+      // BYO Supabase pre-fill reads the AGENT row, not the user profile: the
+      // connection belongs to the agent (Rosa's rule, 14 Okt), so the wali's own
+      // row keeps nothing. The migration copied any legacy profile values onto
+      // the agent, so this read is the single source of truth.
+      const { data: existingAgent } = await supabase
+        .from('agents')
+        .select('supabase_url, supabase_anon_key')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (existingAgent) {
+        setSupabaseUrl((existingAgent as { supabase_url?: string | null }).supabase_url || '');
+        setSupabaseAnonKey((existingAgent as { supabase_anon_key?: string | null }).supabase_anon_key || '');
       }
     })();
   }, [user]);
@@ -96,11 +108,11 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
         if (rpcErr) throw new Error('Invite check failed. Try again.');
         if (!ok) throw new Error('Invite code invalid or already used.');
       } else if (step === 'supabase') {
-        // Phase 1 runs on WOA's shared project, so this step is optional. Save only
-        // when BOTH fields are filled; a half-filled pair is a typo, not a config.
-        if (supabaseUrl && supabaseAnonKey) {
-          await saveProfile({ supabase_url: supabaseUrl, supabase_anon_key: supabaseAnonKey });
-        } else if (supabaseUrl || supabaseAnonKey) {
+        // Phase 1 runs on WOA's shared project, so this step is optional. The pair
+        // stays in state until the agent exists (ritual step) — the user profile
+        // row never holds it. Validation only: BOTH fields or NEITHER; a half-
+        // filled pair is a typo, not a config.
+        if (Boolean(supabaseUrl) !== Boolean(supabaseAnonKey)) {
           throw new Error('Fill both Supabase fields, or leave both empty to skip.');
         }
       } else if (step === 'gmail') {
@@ -145,6 +157,11 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
             // A skipped key is stored as NULL, not '' — gemini_key_set (a generated
             // column keyed on IS NOT NULL) must read false, or the dashboard lies.
             gemini_api_key: geminiKey.trim() || null,
+            // BYO Supabase lands on the agent row, same rule as the Gemini key:
+            // the connection travels WITH the agent when it is adopted. Skipped
+            // pair is stored as NULL, never ''.
+            supabase_url: supabaseUrl.trim() || null,
+            supabase_anon_key: supabaseAnonKey.trim() || null,
             onboarding_complete: true,
           })
           .select(AGENT_PUBLIC_COLUMNS)
