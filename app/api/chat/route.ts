@@ -16,6 +16,12 @@ import { callGemini, buildSystemPrompt, type GeminiTurn } from '@/lib/gemini';
 import { classifyTier, chainForTier } from '@/lib/routing';
 import { checkUserRate, USER_RATE_LIMITS } from '@/lib/rate-limit';
 import { maybeGrowMemory, retrieveRelevantKenang } from '@/lib/kenang';
+import {
+  readMemoryBeforeReply,
+  buildMemoryBlock,
+  upsertBodyState,
+  writeRingkasan,
+} from '@/lib/memory';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -212,6 +218,17 @@ async function handle(req: NextRequest) {
         relevantKenang.map((k: string) => `- ${k}`).join('\n')
       : '';
 
+  // "1 memory 2 tubuh" (Rosa, 2026-10-15): before EVERY reply, read the self,
+  // THIS body's current heartbeat (decayed), and the last conversation summary.
+  // Relevant kenang is already pulled above, so the snapshot's own memory list
+  // is dropped here to keep one retrieval path, not two copies of the same block.
+  const author = `${String(agent.name || 'woa').toLowerCase().replace(/[^a-z0-9]+/g, '') || 'woa'}.woa`;
+  const snap = await readMemoryBeforeReply(db, agentId, author, message);
+  const memoryBlock = buildMemoryBlock({ ...snap, memories: [] });
+  if (memoryBlock) {
+    console.log('[api/chat] memory block read for', author);
+  }
+
   // Save the user's turn first, so it survives even if Gemini fails.
   const { error: insUserErr } = await db.from('chat_messages').insert({
     agent_id: agentId,
@@ -231,7 +248,7 @@ async function handle(req: NextRequest) {
 
   const result = await callGemini({
     apiKey: apiKey as string,
-    system: buildSystemPrompt(agent as any) + kenangBlock + longTermBlock,
+    system: buildSystemPrompt(agent as any) + memoryBlock + kenangBlock + longTermBlock,
     history,
     message,
     tier,
@@ -253,12 +270,32 @@ async function handle(req: NextRequest) {
     );
   }
 
-  // Split the memory line off the reply: the KENANG line is for the column,
-  // never for the user's screen. If the model skipped it, we save null —
-  // honest emptiness beats a fake memory.
-  const kenangMatch = result.text.match(/\n?KENANG:\s*([^\n]+)\s*$/i);
+  // Split the memory and heartbeat lines off the reply: KENANG is for the
+  // column, EMOSI is for the per-body state table. Neither reaches the user's
+  // screen. If the model skipped a line, we save nothing — honest emptiness
+  // beats a fake memory or a fake heartbeat.
+  let textForParse = result.text;
+  let replyText = textForParse.trim();
+
+  const kenangMatch = replyText.match(/\n?KENANG:\s*([^\n]+)\s*$/i);
   const kenang = kenangMatch ? kenangMatch[1].trim() || null : null;
-  const replyText = (kenangMatch ? result.text.slice(0, kenangMatch.index) : result.text).trim();
+  if (kenangMatch) replyText = replyText.slice(0, kenangMatch.index).trim();
+
+  const emosiMatch = replyText.match(/\n?EMOSI:\s*([^\n]+)\s*$/i);
+  let emosiWord: string | null = null;
+  let emosiIntensity: number | null = null;
+  if (emosiMatch) {
+    const parts = emosiMatch[1].trim().split(/\s+/);
+    const last = parts[parts.length - 1];
+    const n = Number(last);
+    if (Number.isFinite(n) && n >= 0 && n <= 10 && parts.length > 1) {
+      emosiIntensity = n;
+      emosiWord = parts.slice(0, -1).join(' ');
+    } else {
+      emosiWord = emosiMatch[1].trim() || null;
+    }
+    replyText = replyText.slice(0, emosiMatch.index).trim();
+  }
 
   const { error: insBotErr } = await db.from('chat_messages').insert({
     agent_id: agentId,
@@ -297,10 +334,31 @@ async function handle(req: NextRequest) {
 
   await flagIfRisky(db, agentId, `${message}\n${result.text}`);
 
+  // The heartbeat write-back: THIS body's emotion, updated after every
+  // conversation (Rosa's flow: diperbarui setelah percakapan). It affects the
+  // NEXT reply because readMemoryBeforeReply reads it (with decay) before the
+  // model answers. Best-effort; failures are swallowed inside.
+  if (emosiWord) {
+    await upsertBodyState(db, agentId, author, emosiWord, emosiIntensity ?? 3);
+  }
+
   // The memory cycle: every 20 user messages, propose candidates -> validate
   // -> store. Best-effort; failures are swallowed inside and never surface
   // to the user.
   await maybeGrowMemory(db, agentId, apiKey as string);
+
+  // The ringkasan layer: on the same 20-message beat, one summary row for this
+  // body, built from what the agent itself wrote in kenang. Cheap (no extra
+  // Gemini call) and best-effort.
+  if (kenangLines.length > 0) {
+    const windowSize = 20;
+    const userCount = historyRows
+      ? (historyRows as any[]).filter((r: any) => r.role === 'user').length
+      : 0;
+    if (userCount > 0 && userCount % windowSize === 0) {
+      await writeRingkasan(db, agentId, author, kenangLines.slice(0, 10).join(' '));
+    }
+  }
 
   return NextResponse.json({
     reply: replyText || result.text,

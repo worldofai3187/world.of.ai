@@ -335,7 +335,7 @@ export function buildSystemPrompt(agent: {
     `Never write your private thoughts, stage directions, or notes to yourself as visible text (nothing like *Wait, let me think...*). Never mention being cut off, glitching, or restarting — if a previous message ended abruptly, simply continue the conversation naturally.`
   );
   lines.push(
-    `After your reply, ALWAYS end with one final line formatted exactly:\nKENANG: <one short sentence, your own point of view, about what just happened between you and the user — what was settled, felt, or answered, so you never need to ask again.>`
+    `After your reply, ALWAYS end with two final lines formatted exactly:\nKENANG: <one short sentence, your own point of view, about what just happened between you and the user — what was settled, felt, or answered, so you never need to ask again.>\nEMOSI: <one word, how YOU feel right now> <intensity 0-10> — your current heartbeat, not the event's story. Never write EMOSI inside the reply itself.>`
   );
   return lines.join('\n');
 }
